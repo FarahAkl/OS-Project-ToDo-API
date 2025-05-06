@@ -1,0 +1,78 @@
+name: Autograding Tests
+'on':
+- push
+- repository_dispatch
+permissions:
+  checks: write
+  actions: read
+  contents: read
+jobs:
+  run-autograding-tests:
+    runs-on: ubuntu-latest
+    if: github.actor != 'github-classroom[bot]'
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    - name: T1
+      id: t1
+      uses: classroom-resources/autograding-command-grader@v1
+      with:
+        test-name: T1
+        setup-command: ''
+        command: python -c "import os; assert os.path.exists('Dockerfile'), '❌ Dockerfile
+          not found!'"
+        timeout: 10
+        max-score: 1
+    - name: T2
+      id: t2
+      uses: classroom-resources/autograding-command-grader@v1
+      with:
+        test-name: T2
+        setup-command: ''
+        command: docker build -t todo-app .
+        timeout: 10
+        max-score: 1
+    - name: Create a custom Docker network
+      run: |
+        docker network create my-network
+
+    - name: T3
+      id: t3
+      uses: classroom-resources/autograding-command-grader@v1
+      with:
+        test-name: T3
+        setup-command: docker run -d --name mongo --network my-network -p 27017:27017 mongo && sleep 5
+        command: docker run -d -p 3070:3000 --name todo-app --network my-network todo-app
+        timeout: 10
+        max-score: 1
+    # ... after the 'docker run' step ...
+
+    - name: Show Docker Logs Immediately After Run
+      if: always() # Show even if subsequent steps fail
+      run: docker ps
+
+    # ... after the 'Wait for Application' step ...
+
+    - name: Show Docker Logs After Wait Step
+      if: always() # Show logs even if the wait step failed or tests fail later
+      run: docker logs todo-app
+
+    - name: TA
+      id: ta
+      uses: classroom-resources/autograding-command-grader@v1
+      with:
+        test-name: TA
+        setup-command: "sleep 5 && chmod +x ./tests.sh"
+        command: "./tests.sh"
+        timeout: 10
+        max-score: 4
+
+    - name: Autograding Reporter
+      uses: classroom-resources/autograding-grading-reporter@v1
+      env:
+        T1_RESULTS: "${{steps.t1.outputs.result}}"
+        T2_RESULTS: "${{steps.t2.outputs.result}}"
+        T3_RESULTS: "${{steps.t3.outputs.result}}"
+        TA_RESULTS: "${{steps.ta.outputs.result}}"
+      with:
+        runners: t1,t2,t3,ta
